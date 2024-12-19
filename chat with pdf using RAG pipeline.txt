@@ -1,0 +1,89 @@
+import requests
+import os
+import PyPDF2
+import platform
+
+def download_google_drive_file(file_id, save_path):
+    """Downloads a file from Google Drive, handling large file tokens."""
+    base_url = "https://drive.google.com/uc?export=download"
+    session = requests.Session()
+    try:
+        print(f"Downloading file from Google Drive (ID: {file_id})...")
+        response = session.get(base_url, params={"id": file_id}, stream=True)
+        token = get_confirm_token(response)
+
+        if token:
+            params = {"id": file_id, "confirm": token}
+            response = session.get(base_url, params=params, stream=True)
+
+        save_response_content(response, save_path)
+        print(f"File successfully downloaded to: {save_path}")
+    except Exception as e:
+        print(f"Error downloading the file: {e}")
+
+def get_confirm_token(response):
+    """Extracts confirmation token for large Google Drive files."""
+    for key, value in response.cookies.items():
+        if key.startswith("download_warning"):
+            return value
+    return None
+
+def save_response_content(response, save_path):
+    """Saves the content of the response to a file."""
+    CHUNK_SIZE = 32768
+    with open(save_path, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk:
+                f.write(chunk)
+
+def open_pdf_to_page(file_path, page_number):
+    """Opens a PDF file to a specific page using platform-specific commands."""
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
+    try:
+        # Validate page number
+        with open(file_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            total_pages = len(reader.pages)
+            if page_number < 1 or page_number > total_pages:
+                print(f"Invalid page number. This PDF has {total_pages} pages.")
+                return
+
+        # Platform-specific PDF opening commands
+        system_platform = platform.system()
+        if system_platform == "Windows":
+            # Use Adobe Reader to open a specific page
+            print(f"Opening Page {page_number} in {file_path}...")
+            os.system(f'start acrord32.exe /A "page={page_number}" "{file_path}"')
+        elif system_platform == "Linux":
+            # Linux does not support page-specific opening directly
+            print(f"Opening PDF on Linux. Navigate to Page {page_number} manually.")
+            os.system(f"xdg-open '{file_path}'")
+        elif system_platform == "Darwin":  # macOS
+            print(f"Opening PDF on MacOS. Navigate to Page {page_number} manually.")
+            os.system(f"open '{file_path}'")
+        else:
+            print("Unsupported operating system. Cannot open PDF.")
+    except Exception as e:
+        print(f"Error processing the PDF: {e}")
+
+def main():
+    # Google Drive file details
+    file_id = "1QsDuzguFbNvHuCmaL8oagpDJLQ_GPGoi"  # Replace with the actual file ID
+    save_path = "downloaded_file.pdf"
+
+    # Download the file
+    download_google_drive_file(file_id, save_path)
+
+    # Query for page number
+    query = input("Enter the page query: ").strip().lower()
+    if query.startswith("page") and query[4:].isdigit():
+        page_number = int(query[4:])
+        open_pdf_to_page(save_path, page_number)
+    else:
+        print("Invalid query format. Please enter in the format 'page<number>' (e.g., page2).")
+
+if _name_ == "_main_":
+    main()
